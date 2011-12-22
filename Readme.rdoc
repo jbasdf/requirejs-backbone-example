@@ -2,7 +2,7 @@ Template project for backbone with require.js:
 ==========================================
 
 This project demonstrates how to use require.js with backbone.js and then replace require.js with almond.js in production. 
-See the app.build.js file in public/js to see how the project is built.
+See the app.build.js file in public/js to see how the project is built. Note that the included require.js is currently an edge version.
 
 To build the javascript files you can do:
   node public/js/app.build.js
