@@ -1,0 +1,26 @@
+Template project for backbone with require.js:
+==========================================
+
+This project demonstrates how to use require.js with backbone.js and then replace require.js with almond.js in production. 
+See the app.build.js file in public/js to see how the project is built.
+
+To build the javascript files you can do:
+  node public/js/app.build.js
+
+However I'm lazy and like to type less so there's also a rake task:
+  rake build
+  
+Usage:
+=============
+This project comes with a basic sinatra app for serving assets. If you have ruby and bundler installed just do:
+
+  bundle install
+
+To run the project
+
+  ruby app.rb
+  
+Then visit the following 3 urls:
+http://localhost:4567  
+http://localhost:4567/dev
+http://localhost:4567/jquery <-- this file demonstrates how currently require.js will prefer the jquery loaded in the page to the one explicitly defined in the project. 
