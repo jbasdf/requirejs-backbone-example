@@ -12,7 +12,8 @@ define([
 			this.render();
 		},
 		
-		render: function(){	
+		render: function(){
+			$('#inside').html($.fn.jquery);	
 			$(this.el).html(_.template(MainViewTemplate, { 'message': 'Hello World' }));	
 			$('body').append(this.el);
 			return this;
