@@ -56,7 +56,9 @@ var runner = configs.reduceRight(function(prev, currentConfig) {
 	return function (buildReportText) { 
 		requirejs.optimize(mix(currentConfig), prev);
 	};
-}, function(buildReportText) {} );
+}, function(buildReportText){
+	console.log(buildReportText);
+});
 
 //Run the builds
 runner();
