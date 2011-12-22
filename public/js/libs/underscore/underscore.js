@@ -5,7 +5,8 @@
 //     Oliver Steele's Functional, and John Resig's Micro-Templating.
 //     For all details and documentation:
 //     http://documentcloud.github.com/underscore
-define(['jquery'], function ($){
+
+(function() {
 
   // Baseline setup
   // --------------
@@ -977,6 +978,4 @@ define(['jquery'], function ($){
     return this._wrapped;
   };
 
-	return _;
-	
-});
+}).call(this);

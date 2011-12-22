@@ -9539,13 +9539,12 @@ window.jQuery = window.$ = jQuery;
 // Do this after creating the global so that if an AMD module wants to call
 // noConflict to hide this version of jQuery, it will work.
 if ( typeof define === "function" && define.amd && define.amd.jQuery ) {
-	define( "jquery", [], function () { return jQuery.noConflict(true); } );
+	define( "jquery", [], function () { return jQuery; } );
 }
 
 
 
 })( window );
-
 //     Underscore.js 1.2.3
 //     (c) 2009-2011 Jeremy Ashkenas, DocumentCloud Inc.
 //     Underscore is freely distributable under the MIT license.
@@ -9553,7 +9552,8 @@ if ( typeof define === "function" && define.amd && define.amd.jQuery ) {
 //     Oliver Steele's Functional, and John Resig's Micro-Templating.
 //     For all details and documentation:
 //     http://documentcloud.github.com/underscore
-define('underscore',['jquery'], function ($){
+
+(function() {
 
   // Baseline setup
   // --------------
@@ -9606,7 +9606,7 @@ define('underscore',['jquery'], function ($){
     exports._ = _;
   } else if (typeof define === 'function' && define.amd) {
     // Register as a named module with AMD.
-    define('underscore', function() {
+    define('underscore',[], function() {
       return _;
     });
   } else {
@@ -10525,11 +10525,9 @@ define('underscore',['jquery'], function ($){
     return this._wrapped;
   };
 
-	return _;
-	
-});
+}).call(this);
 //     Backbone.js 0.5.3
-//     (c) 2010 Jeremy Ashkenas, DocumentCloud Inc.
+//     (c) 2010-2011 Jeremy Ashkenas, DocumentCloud Inc.
 //     Backbone may be freely distributed under the MIT license.
 //     For all details and documentation:
 //     http://documentcloud.github.com/backbone
@@ -10542,7 +10540,7 @@ define('underscore',['jquery'], function ($){
     factory(root, exports, require('underscore'));
   } else if (typeof define === 'function' && define.amd) {
     // AMD
-    define('backbone', ['underscore', 'jquery', 'exports'], function(_, $, exports) {
+    define('backbone',['underscore', 'jquery', 'exports'], function(_, $, exports) {
       factory(root, exports, _, $);
     });
   } else {
@@ -10653,8 +10651,8 @@ define('underscore',['jquery'], function ($){
   Backbone.Model = function(attributes, options) {
     var defaults;
     attributes || (attributes = {});
-    if (defaults = this.defaults) {
-      if (_.isFunction(defaults)) defaults = defaults.call(this);
+    if (options && options.parse) attributes = this.parse(attributes);
+    if (defaults = getValue(this, 'defaults')) {
       attributes = _.extend({}, defaults, attributes);
     }
     this.attributes = {};
@@ -10707,12 +10705,21 @@ define('underscore',['jquery'], function ($){
 
     // Set a hash of model attributes on the object, firing `"change"` unless you
     // choose to silence it.
-    set : function(attrs, options) {
+    set : function(key, value, options) {
+      var attrs;
+      if (_.isObject(key) || key == null) {
+        attrs = key;
+        options = value;
+      } else {
+        attrs = {};
+        attrs[key] = value;
+      }
 
       // Extract attributes and options.
       options || (options = {});
       if (!attrs) return this;
       if (attrs.attributes) attrs = attrs.attributes;
+      if (options.unset) for (var attr in attrs) attrs[attr] = void 0;
       var now = this.attributes, escaped = this._escapedAttributes;
 
       // Run validation.
@@ -10728,8 +10735,8 @@ define('underscore',['jquery'], function ($){
       // Update attributes.
       for (var attr in attrs) {
         var val = attrs[attr];
-        if (!_.isEqual(now[attr], val)) {
-          now[attr] = val;
+        if (!_.isEqual(now[attr], val) || (options.unset && (attr in now))) {
+          options.unset ? delete now[attr] : now[attr] = val;
           delete escaped[attr];
           this._changed = true;
           if (!options.silent) this.trigger('change:' + attr, this, val, options);
@@ -10747,52 +10754,15 @@ define('underscore',['jquery'], function ($){
     // Remove an attribute from the model, firing `"change"` unless you choose
     // to silence it. `unset` is a noop if the attribute doesn't exist.
     unset : function(attr, options) {
-      if (!(attr in this.attributes)) return this;
-      options || (options = {});
-      var value = this.attributes[attr];
-
-      // Run validation.
-      var validObj = {};
-      validObj[attr] = void 0;
-      if (!options.silent && this.validate && !this._performValidation(validObj, options)) return false;
-
-      // changedAttributes needs to know if an attribute has been unset.
-      (this._unsetAttributes || (this._unsetAttributes = [])).push(attr);
-
-      // Remove the attribute.
-      delete this.attributes[attr];
-      delete this._escapedAttributes[attr];
-      if (attr == this.idAttribute) delete this.id;
-      this._changed = true;
-      if (!options.silent) {
-        this.trigger('change:' + attr, this, void 0, options);
-        this.change(options);
-      }
-      return this;
+      (options || (options = {})).unset = true;
+      return this.set(attr, null, options);
     },
 
     // Clear all attributes on the model, firing `"change"` unless you choose
     // to silence it.
     clear : function(options) {
-      options || (options = {});
-      var attr;
-      var old = this.attributes;
-
-      // Run validation.
-      var validObj = {};
-      for (attr in old) validObj[attr] = void 0;
-      if (!options.silent && this.validate && !this._performValidation(validObj, options)) return false;
-
-      this.attributes = {};
-      this._escapedAttributes = {};
-      this._changed = true;
-      if (!options.silent) {
-        for (attr in old) {
-          this.trigger('change:' + attr, this, void 0, options);
-        }
-        this.change(options);
-      }
-      return this;
+      (options || (options = {})).unset = true;
+      return this.set(_.clone(this.attributes), options);
     },
 
     // Fetch the model from the server. If the server's representation of the
@@ -10846,7 +10816,7 @@ define('underscore',['jquery'], function ($){
     // using Backbone's restful methods, override this to change the endpoint
     // that will be called.
     url : function() {
-      var base = getUrl(this.collection) || this.urlRoot || urlError();
+      var base = getValue(this.collection, 'url') || this.urlRoot || urlError();
       if (this.isNew()) return base;
       return base + (base.charAt(base.length - 1) == '/' ? '' : '/') + encodeURIComponent(this.id);
     },
@@ -10872,7 +10842,6 @@ define('underscore',['jquery'], function ($){
     change : function(options) {
       this.trigger('change', this, options);
       this._previousAttributes = _.clone(this.attributes);
-      this._unsetAttributes = null;
       this._changed = false;
     },
 
@@ -10888,23 +10857,16 @@ define('underscore',['jquery'], function ($){
     // view need to be updated and/or what attributes need to be persisted to
     // the server. Unset attributes will be set to undefined.
     changedAttributes : function(now) {
+      if (!this._changed) return false;
       now || (now = this.attributes);
-      var old = this._previousAttributes, unset = this._unsetAttributes;
-
-      var changed = false;
+      var changed = false, old = this._previousAttributes;
       for (var attr in now) {
-        if (!_.isEqual(old[attr], now[attr])) {
-          changed || (changed = {});
-          changed[attr] = now[attr];
-        }
+        if (_.isEqual(old[attr], now[attr])) continue;
+        (changed || (changed = {}))[attr] = now[attr];
       }
-
-      if (unset) {
-        changed || (changed = {});
-        var len = unset.length;
-        while (len--) changed[unset[len]] = void 0;
+      for (var attr in old) {
+        if (!(attr in now)) (changed || (changed = {}))[attr] = void 0;
       }
-
       return changed;
     },
 
@@ -10925,7 +10887,7 @@ define('underscore',['jquery'], function ($){
     // if all is well. If a specific `error` callback has been passed,
     // call that instead of firing the general `"error"` event.
     _performValidation : function(attrs, options) {
-      var error = this.validate(attrs);
+      var error = this.validate(attrs, options);
       if (error) {
         if (options.error) {
           options.error(this, error, options);
@@ -10976,6 +10938,7 @@ define('underscore',['jquery'], function ($){
     add : function(models, options) {
       if (_.isArray(models)) {
         for (var i = 0, l = models.length; i < l; i++) {
+          if (options && (options.at == +options.at) && i) options.at += 1;
           this._add(models[i], options);
         }
       } else {
@@ -11036,7 +10999,7 @@ define('underscore',['jquery'], function ($){
       options || (options = {});
       this.each(this._removeReference);
       this._reset();
-      this.add(models, {silent: true});
+      this.add(models, {silent: true, parse: options.parse});
       if (!options.silent) this.trigger('reset', this, options);
       return this;
     },
@@ -11046,6 +11009,7 @@ define('underscore',['jquery'], function ($){
     // models to the collection instead of resetting.
     fetch : function(options) {
       options || (options = {});
+      if (options.parse === undefined) options.parse = true;
       var collection = this;
       var success = options.success;
       options.success = function(resp, status, xhr) {
@@ -11098,7 +11062,7 @@ define('underscore',['jquery'], function ($){
     _prepareModel : function(model, options) {
       if (!(model instanceof Backbone.Model)) {
         var attrs = model;
-        model = new this.model(attrs, {collection: this});
+        model = new this.model(attrs, {collection: this, parse: options.parse});
         if (model.validate && !model._performValidation(model.attributes, options)) model = false;
       } else if (!model.collection) {
         model.collection = this;
@@ -11198,8 +11162,8 @@ define('underscore',['jquery'], function ($){
 
   // Cached regular expressions for matching named param parts and splatted
   // parts of route strings.
-  var namedParam    = /:([\w\d]+)/g;
-  var splatParam    = /\*([\w\d]+)/g;
+  var namedParam    = /:\w+/g;
+  var splatParam    = /\*\w+/g;
   var escapeRegExp  = /[-[\]{}()+?.,\\^$|#\s]/g;
 
   // Set up all inheritable **Backbone.Router** properties and methods.
@@ -11226,8 +11190,8 @@ define('underscore',['jquery'], function ($){
     },
 
     // Simple proxy to `Backbone.history` to save a fragment into the history.
-    navigate : function(fragment, triggerRoute) {
-      Backbone.history.navigate(fragment, triggerRoute);
+    navigate : function(fragment, options) {
+      Backbone.history.navigate(fragment, options);
     },
 
     // Bind all defined routes to `Backbone.history`. We have to reverse the
@@ -11247,9 +11211,9 @@ define('underscore',['jquery'], function ($){
     // Convert a route string into a regular expression, suitable for matching
     // against the current location hash.
     _routeToRegExp : function(route) {
-      route = route.replace(escapeRegExp, "\\$&")
-                   .replace(namedParam, "([^\/]*)")
-                   .replace(splatParam, "(.*?)");
+      route = route.replace(escapeRegExp, '\\$&')
+                   .replace(namedParam, '([^\/]*)')
+                   .replace(splatParam, '(.*?)');
       return new RegExp('^' + route + '$');
     },
 
@@ -11272,7 +11236,7 @@ define('underscore',['jquery'], function ($){
   };
 
   // Cached regex for cleaning hashes.
-  var hashStrip = /^#*/;
+  var hashStrip = /^#/;
 
   // Cached regex for detecting MSIE.
   var isExplorer = /msie [\w.]+/;
@@ -11383,27 +11347,43 @@ define('underscore',['jquery'], function ($){
       return matched;
     },
 
-    // Save a fragment into the hash history. You are responsible for properly
-    // URL-encoding the fragment in advance. This does not trigger
-    // a `hashchange` event.
-    navigate : function(fragment, triggerRoute) {
+    // Save a fragment into the hash history, or replace the URL state if the
+    // 'replace' option is passed. You are responsible for properly URL-encoding
+    // the fragment in advance.
+    //
+    // The options object can contain `trigger: true` if you wish to have the
+    // route callback be fired (not usually desirable), or `replace: true`, if
+    // you which to modify the current URL without adding an entry to the history.
+    navigate : function(fragment, options) {
+      if (!options || options === true) options = {trigger: options};
       var frag = (fragment || '').replace(hashStrip, '');
       if (this.fragment == frag || this.fragment == decodeURIComponent(frag)) return;
       if (this._hasPushState) {
-        var loc = window.location;
         if (frag.indexOf(this.options.root) != 0) frag = this.options.root + frag;
         this.fragment = frag;
-        window.history.pushState({}, document.title, loc.protocol + '//' + loc.host + frag);
+        window.history[options.replace ? 'replaceState' : 'pushState']({}, document.title, frag);
       } else {
-        window.location.hash = this.fragment = frag;
+        this.fragment = frag;
+        this._updateHash(window.location, frag, options.replace);
         if (this.iframe && (frag != this.getFragment(this.iframe.location.hash))) {
-          this.iframe.document.open().close();
-          this.iframe.location.hash = frag;
+          // Opening and closing the iframe tricks IE7 and earlier to push a history entry on hash-tag change.
+          // When replace is true, we don't want this.
+          if(!options.replace) this.iframe.document.open().close();
+          this._updateHash(this.iframe.location, frag, options.replace);
         }
       }
-      if (triggerRoute) this.loadUrl(fragment);
-    }
+      if (options.trigger) this.loadUrl(fragment);
+    },
 
+    // Update the hash location, either replacing the current entry, or adding
+    // a new one to the browser history.
+    _updateHash: function(location, fragment, replace) {
+      if (replace) {
+        location.replace(location.toString().replace(/(javascript:|#).*$/, '') + '#' + fragment);
+      } else {
+        location.hash = fragment;
+      }
+    }
   });
 
   // Backbone.View
@@ -11419,13 +11399,6 @@ define('underscore',['jquery'], function ($){
     this.initialize.apply(this, arguments);
   };
 
-  // Element lookup, scoped to DOM elements within the current view.
-  // This should be prefered to global lookups, if you're dealing with
-  // a specific view.
-  var selectorDelegate = function(selector) {
-    return $(selector, this.el);
-  };
-
   // Cached regex to split keys for `delegate`.
   var eventSplitter = /^(\S+)\s*(.*)$/;
 
@@ -11438,8 +11411,11 @@ define('underscore',['jquery'], function ($){
     // The default `tagName` of a View's element is `"div"`.
     tagName : 'div',
 
-    // Attach the `selectorDelegate` function as the `$` property.
-    $       : selectorDelegate,
+    // jQuery delegate for element lookup, scoped to DOM elements within the
+    // current view. This should be prefered to global lookups where possible.
+    $ : function(selector) {
+      return (selector == null) ? $(this.el) : $(selector, this.el);
+    },
 
     // Initialize is an empty function by default. Override it with your own
     // initialization logic.
@@ -11486,8 +11462,7 @@ define('underscore',['jquery'], function ($){
     // This only works for delegate-able events: not `focus`, `blur`, and
     // not `change`, `submit`, and `reset` in Internet Explorer.
     delegateEvents : function(events) {
-      if (!(events || (events = this.events))) return;
-      if (_.isFunction(events)) events = events.call(this);
+      if (!(events || (events = getValue(this, 'events')))) return;
       this.undelegateEvents();
       for (var key in events) {
         var method = this[events[key]];
@@ -11583,7 +11558,7 @@ define('underscore',['jquery'], function ($){
 
     // Ensure that we have a URL.
     if (!options.url) {
-      params.url = getUrl(model) || urlError();
+      params.url = getValue(model, 'url') || urlError();
     }
 
     // Ensure that we have the appropriate request data.
@@ -11664,11 +11639,11 @@ define('underscore',['jquery'], function ($){
     return child;
   };
 
-  // Helper function to get a URL from a Model or Collection as a property
+  // Helper function to get a value from a Backbone object as a property
   // or as a function.
-  var getUrl = function(object) {
-    if (!(object && object.url)) return null;
-    return _.isFunction(object.url) ? object.url() : object.url;
+  var getValue = function(object, prop) {
+    if (!(object && object[prop])) return null;
+    return _.isFunction(object[prop]) ? object[prop]() : object[prop];
   };
 
   // Throw an error when a URL is needed, and none is supplied.
@@ -11996,7 +11971,8 @@ define('views/main/main_view',[
 			this.render();
 		},
 		
-		render: function(){	
+		render: function(){
+			$('#inside').html($.fn.jquery);	
 			$(this.el).html(_.template(MainViewTemplate, { 'message': 'Hello World' }));	
 			$('body').append(this.el);
 			return this;
